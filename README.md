@@ -1,6 +1,6 @@
 # Statistical analysis with R
 
-These files show an analysis of acceptability judgment and self paced reading data used for this <a href="https://doi.org/10.3390/languages4030048" target="_blank">paper</a>.
+These files show an analysis of acceptability judgment and self paced reading data used for this <a href="https://doi.org/10.3390/languages4030048">paper</a>.
 
 
 The analysis included:
