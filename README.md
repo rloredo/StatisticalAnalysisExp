@@ -5,7 +5,7 @@ These files show an analysis of acceptability judgment and self paced reading da
 
 The analysis included:
 
-*Data description, and outlier removing
+*Data description and outlier removing
 
 *Linear mixed effects models
 
