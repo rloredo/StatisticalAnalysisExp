@@ -1,0 +1,934 @@
+---
+title: "Rapid access to..."
+author: "Loredo, Kamienkowski, Jaichenco"
+date: '  2018'
+output:
+  pdf_document: default
+  word_document: default
+---
+
+
+## Experiment 1: Acceptability judgment
+### Data Analysis 
+  
+Data and libraries loading.
+    
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+
+require(readr)
+require(lme4)
+require(multcomp)
+require(ggplot2)
+require(dplyr)
+require(tidyr)
+require(brms)
+require(emmeans)
+require(tidyverse)
+require(nlme)
+library(psycho)
+library(lmerTest)
+
+
+todoCUANT <- read.csv2("ACCEcritical.csv", sep = ";")
+control <- read.csv2("ACCEcontrol.csv", sep = ";")
+
+```
+
+
+##### Control stimuli  
+
+Print data structure. For condition EAC is highly acceptable and EIC is highly unnaceptable.
+
+```{r}
+head(control)
+```
+
+Number of observations
+
+```{r}
+
+cuantificadores <- rle(todoCUANT$subject)
+deleted <- length(cuantificadores$values) * 20 - sum(cuantificadores$lengths)
+perDeleted <- (deleted*100)/(length(cuantificadores$values) * 20 )
+#sum(controlD$lengths)
+
+controlD <- rle(control$subject)
+deleted <- length(controlD$values) * 40 - sum(controlD$lengths)
+perDeleted <- (deleted*100)/(length(controlD$values) * 20 )
+sum(controlD$lengths)
+
+```
+
+
+
+
+Histogram for distribution. 
+
+```{r}
+plotContr <- ggplot(control, aes(factor(acceptability), fill = factor(condition, labels = c("HAS", "HUS")))) + labs(fill = "Condition") + geom_bar(position = "dodge")
+plotContr + xlab("Acceptability rating") + ylab("n") + ggtitle("Distribution HAS, HUS") 
+```
+
+Following a Norman (2010), we decided to use an both a LMM model with this distribution. Nevertheless, we include at the end non parametric test (Kruskal and Wilconxon tests) that showed similar results with less conservative p-values. 
+
+
+Descriptive statistics of the data. Condition, mean, and standar deviation are indicated. 
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+EAC <- control$acceptability[control$condition == 'EAC']
+EIC <- control$acceptability[control$condition == 'EIC']
+
+meanControl  <- c(mean(EAC), mean(EIC))
+sdControl    <- c(sd(EAC), sd(EIC))
+filControl   <- c('Highly Acceptable S', 'Highly Unacceptable S')
+resumen_control <- data.frame(filControl, meanControl, sdControl)
+colnames(resumen_control) <- c('Condition', 'Mean', 'SD')
+resumen_control
+```
+
+
+###### LMM 
+Our model uses condition as fixed effect and subject and items as random effects. 
+We fitted an LMM.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+model_control <- lmer(acceptability ~ condition + (1|subject) + (1|idnumber), data=control, REML = FALSE)
+summary(model_control)
+summary(glht(model_control, linfct=mcp(condition="Tukey")))
+
+
+```
+
+Our analysis show that the differences between HAS and HUS are highly significant (p < .0001)
+
+#### Critical stimuli (dialogs with quantifiers)
+
+Print data structure. 
+
+CNS = LB + Only some
+CNA = LB + Some 
+FPS = UB + Only some
+FPA = UB + Some
+
+
+```{r}
+head(todoCUANT)
+```
+
+Histogram for distribution
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+#All stimuli merged
+ac <- ggplot(data=todoCUANT, aes(todoCUANT$acceptability)) + geom_histogram(binwidth=0.5)  + ggtitle("Distribution for critical stimuli")
+ac + xlab("Acceptability rate") + ylab("n") + scale_x_continuous(breaks = 0:6) + theme_classic() + theme(plot.title = element_text(hjust = 0.5, size = 11))
+
+#Distribution by stimuli
+plotCuant <- ggplot(todoCUANT, aes(factor(acceptability), fill = factor(condition, labels = c("LB+S", "LB+OS", "UB+S", "UB+OS")))) + labs(fill = "Condition") + geom_bar(position = "dodge")
+plotCuant + xlab("Acceptability rating") + ylab("n") + ggtitle("Distribution") 
+
+```
+
+Descriptive statistics of the data. Condition, mean, and standar deviation are indicated. 
+
+```{r}
+CNA <- todoCUANT$acceptability[todoCUANT$condition == 'CNA']
+CNS <- todoCUANT$acceptability[todoCUANT$condition == 'CNS']
+FPA <- todoCUANT$acceptability[todoCUANT$condition == 'FPA']
+FPS <- todoCUANT$acceptability[todoCUANT$condition == 'FPS']
+
+meanAC <- c(mean(CNA), mean(CNS), mean(FPA), mean(FPS))
+sdAC   <- c(sd(CNA), sd(CNS), sd(FPA), sd(FPS))
+medianaAC <- c(median(CNA), median(CNS), median(FPA), median(FPS))
+distanciaAC <- c(IQR(CNA), IQR(CNS), IQR(FPA), IQR(FPS))
+condAC <- c('LB + S', 'LB + O', 'UB + S', 'UB + O')
+resAC <- data.frame(condAC, meanAC, sdAC, medianaAC, distanciaAC)
+colnames(resAC) <- c('Condition', 'Mean', 'SD', 'Median', 'IQR')
+resAC
+```
+
+
+###### LMM 
+The LMM model uses condition as a fixed effect and subject and ítem as random effects. Multiple comparisons with Tukey method were performed using {glht}.
+
+```{r}
+macceptability <- lmer(acceptability ~ condition + (1|subject) + (1|idnumber), data=todoCUANT, REML = FALSE)
+summary(macceptability)
+summary(glht(macceptability, linfct=mcp(condition="Tukey")))
+
+```
+
+Our analysis shows that CNS (LB + O) ratings is significantly different from the other conditions, and that the other conditions do not differ.
+
+### Non parametrical statistics.
+For this analysis we use the subject mean for each condition. Each datapoint for each subject consists in the mean for the acceptability rating mean for that condition. 
+
+Mean by condition for subject
+```{r}
+controlEIC <- summarise(group_by(control[control$condition == 'EIC',], subject), mean=mean(acceptability), condition='EIC')
+controlEAC <- summarise(group_by(control[control$condition == 'EAC',], subject), mean=mean(acceptability), condition='EAC')
+
+noParControl <- rbind(controlEIC, controlEAC)
+
+
+dataCNA <- summarise(group_by(todoCUANT[todoCUANT$condition == 'CNA',], subject), mean=mean(acceptability), condition='CNA')
+dataCNS <- summarise(group_by(todoCUANT[todoCUANT$condition == 'CNS',], subject), mean=mean(acceptability), condition='CNS')
+dataFPA <- summarise(group_by(todoCUANT[todoCUANT$condition == 'FPA',], subject), mean=mean(acceptability), condition='FPA')
+dataFPS <- summarise(group_by(todoCUANT[todoCUANT$condition == 'FPS',], subject), mean=mean(acceptability), condition='FPS')
+
+noParCUANT <- rbind(dataCNA, dataCNS, dataFPA, dataFPS)
+
+```
+
+
+
+#### Control stimuli
+
+Create vectors for HAS and HUS
+```{r}
+noParEAC <- noParControl$mean[noParControl$condition == 'EAC']
+noParEIC <- noParControl$mean[noParControl$condition == 'EIC']
+```
+
+Wilcoxon test
+
+```{r}
+wilcox.test(noParEAC, noParEIC)
+```
+
+The p-value obtained is smaller for this test. The downside is that item is not included as a random effect for this model so we incurr in the language-as-fixed effect falacy. Therefore, LMM models are more appropriate. 
+
+
+#### Critical stimuli
+
+Data vector for each condition.
+```{r}
+noParCNA <- noParCUANT$mean[noParCUANT$condition == 'CNA']
+noParCNS <- noParCUANT$mean[noParCUANT$condition == 'CNS']
+noParFPA <- noParCUANT$mean[noParCUANT$condition == 'FPA']
+noParFPS <- noParCUANT$mean[noParCUANT$condition == 'FPS']
+```
+
+Kruskal-Wallis test to analyze inter-condition differences.
+
+```{r}
+kruskal.test(noParCNS, noParCNA, noParFPA, noParFPS)
+```
+
+P-value of 0.01 shows that there is differences between conditions. We proceed with multiple comparisons using Wilcoxon. In this case we will decide to use a more conservative method than Tukey, that is Bonferroni correction where the Alpha p value of 0.05 is divided by the number of comparisons performed. In our case, there were performed 6 comparisons. Thus, the alpha is .008.
+
+```{r}
+CNSxCNA <- wilcox.test(noParCNS, noParCNA)
+FPAxCNS <- wilcox.test(noParFPA, noParCNS)
+FPSxCNS <- wilcox.test(noParFPS, noParCNS)
+FPAxCNA <- wilcox.test(noParFPS, noParFPA)
+FPSxCNA <- wilcox.test(noParFPS, noParCNA)
+FPSxFPA <- wilcox.test(noParFPS, noParFPA)
+
+pvalores <- c(CNSxCNA$p.value,FPAxCNS$p.value, FPSxCNS$p.value, FPAxCNA$p.value, FPSxCNA$p.value, FPSxFPA$p.value)
+W <- c(CNSxCNA$statistic,FPAxCNS$statistic, FPSxCNS$statistic, FPAxCNA$statistic, FPSxCNA$statistic, FPSxFPA$statistic)
+comparacion <- c('LB + S x LB + O', 'UB + S x LB + O', 'UB + O x LB + O', 'UB + S x LB + S', 'UB + O x LB + S', 'UB + O x UB + S')
+
+reporte <- data.frame(comparacion, W, format(pvalores, scientific = FALSE))
+colnames(reporte) <- c('Comparison', 'W', 'p-value')
+
+reporte
+
+```
+
+The results for the table above are the same than for LMM model performed. That we reproduce below:
+
+```{r}
+summary(glht(macceptability, linfct=mcp(condition="Tukey")))
+```
+
+
+## Experiment 2: self-paced reading task
+
+### Data analysis 
+Data and libraries loading. 
+
+```{r, warning=FALSE}
+
+datos <- read.delim('SELFcrit.csv', sep = ';')
+#Change columns to correct class
+datos$rt <- as.numeric(as.character(datos$rt))
+datos$order <- as.numeric(as.character(datos$order))
+datos$rtLog <- log10(datos$rt)
+datos$subject <- as.factor(as.character(datos$subject))
+
+
+#Remove fixation crosses
+datos <- datos[datos$phrase != 'masking_go' & datos$phrase != 'masking_nogo',]
+datosLength <- length(datos$rt)
+datos <- datos[datos$rt > 200 & datos$rt < 13000,]
+datosElim <- datosLength - length(datos$rt) 
+(datosElim * 100) / datosLength
+datosLength <- length(datos$rt)
+
+
+#Create groups by segment
+ind_condition <- datos$condition == 'CNA' | datos$condition == 'FPA' | datos$condition == 'FPS'
+fraseCuant <- datos[ind_condition & datos$phrase == 'blanco_CUANT',]
+fraseRest  <- datos[ind_condition & datos$phrase == 'blanco_REST',]
+fraseCntx  <- datos[ind_condition & datos$phrase == 'CNTX',]
+frasePreg <- datos[ind_condition & datos$phrase == 'PREG',]
+
+
+
+
+
+```
+
+
+Show data structure.
+
+```{r}
+datos[35:39,]
+```
+
+
+#### Accuracy
+Mean of responses to measure the accuracy (1 = correct / 0 = incorrect)
+
+```{r}
+controlCuant <- read.delim('SELFcontrol.csv', sep = ';')
+print(paste('Correct answers: ',  round(mean(controlCuant$is_correct, na.rm = TRUE)*100, 2), '%',  sep = ''))
+```
+
+
+#### Analysis of different segments
+
+##### Outlier trimming (agressive approach)
+Removed all observations below 200 ms or greater than the limit of 13000ms set to the stimuli. 
+Then we identified gaps in the histogram and delete all the values that are separated from the histogram. We checked this whit a qqnorm (values that are discontinuous with the line of dots) and with a dotplot of all rtLog values for all subjects.Finally we took out 2% of each end of the data to keep as the max deleted the 5% (recommended by Ratcliff, 1993)
+
+##### Context
+```{r}
+largoCntx <- length(fraseCntx$rt)
+fraseCntx <- fraseCntx[fraseCntx$rt < 13000 & fraseCntx$rt > 200,]
+boxplot(fraseCntx$rtLog)
+hist(fraseCntx$rtLog, breaks = 50)
+
+qqnorm(fraseCntx$rtLog)
+fraseCntx$subject <- as.factor(fraseCntx$subject)
+ggplot(fraseCntx, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+
+fraseCntx <- fraseCntx[fraseCntx$rtLog > 2.5,]
+fraseCntx <- fraseCntx[order(fraseCntx$rtLog),]
+eliminar <- round((length(fraseCntx$rtLog)*0.02), 0)
+fraseCntx  <- fraseCntx[eliminar:(length(fraseCntx$rtLog)-eliminar),]
+
+
+ggplot(fraseCntx, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+hist(fraseCntx$rtLog, breaks = 30)
+
+cantidadElimCntx <- largoCntx - length(fraseCntx$rt)
+porcenElimCntx <- (cantidadElimCntx/largoCntx) * 100
+print(paste('Deleted ', round(porcenElimCntx, digits = 3), '% of observations.', sep = ''))
+
+
+
+```
+
+##### Data description
+Violin plot of rtLog for UB and LB contexts.
+```{r}
+violinContext <- ggplot(fraseCntx, aes(factor(context), rtLog, fill = factor(context)))
+violinContext + geom_violin(trim = FALSE) + geom_crossbar(stat="summary", fun.y=mean, fun.ymax=mean, fun.ymin=mean, fatten=1, width=1) + theme_minimal() + xlab('Conditions') + ylab('rtLog') + labs(fill = 'Condition', subtitle = 'Context segment')
+
+ggplot(fraseCntx, aes(rtLog, fill = context)) + geom_density(alpha = 0.4)
+ggplot(fraseCntx, aes(rt, colour = context)) + stat_ecdf(alpha = 0.4)
+
+```
+
+Mean and SD
+```{r}
+descriptiveContext <- fraseCntx %>%
+  group_by(context) %>%
+  summarise(mean = mean(rt, na.rm = TRUE), sd = sd(rt, na.rm = TRUE), median = median(rt, na.rm =TRUE))
+descriptiveContext$context <- c('LB', 'UB')
+colnames(descriptiveContext) <- c('Context', 'Mean', 'SD', 'Median')
+print(descriptiveContext)
+```
+
+##### LMM
+LMM for comparing contexts. Context as fixed effect. Subject, item, number of form and order of presentation as random intercepts. 
+
+
+```{r}
+m1_cntx <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data=fraseCntx, REML = FALSE)
+summary(m1_cntx)
+summary(glht(m1_cntx, linfct=mcp(context = "Tukey")))
+
+
+fraseCntx$residuals <- residuals(m1_cntx, type = 'pearson')
+qqnorm(fraseCntx$residuals)
+plot(m1_cntx)
+
+
+```
+
+##### Model criticisim approach
+We use the whole data without removing outliers, we only deteled < 200 and >13000 ms (software error)
+Then we removed datapoints with absolute standarized residuals exceeding 2.5 sd and reanalyze the model.
+To assess the goodness of fit of the model we analyze the distribution of the residuals that should be normally distributed. A t test comparing the residuals between conditions is used for comparing both distributions (it should not be significant)
+
+```{r}
+
+mc_fraseCntx <- datos[ind_condition & datos$phrase == 'CNTX' & datos$rt > 200 & datos$rt < 13000,]
+
+largoCntx_mc <- length(mc_fraseCntx$rt) 
+
+mc_cntx <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseCntx, REML = FALSE)
+summary(mc_cntx)
+
+mc_fraseCntx$residuals <-residuals(mc_cntx, type = 'pearson')
+qqnorm(mc_fraseCntx$residuals)
+min(mc_fraseCntx$residuals)
+max(mc_fraseCntx$residuals)
+plot(mc_cntx)
+
+mc_fraseCntx <- mc_fraseCntx[mc_fraseCntx$residuals < mean(mc_fraseCntx$residuals) + (sd(mc_fraseCntx$residuals) * 2.5) & mc_fraseCntx$residuals > mean(mc_fraseCntx$residuals) - (sd(mc_fraseCntx$residuals) * 2.5),]
+
+cantidadElimCntx <- largoCntx_mc - length(mc_fraseCntx$rt)
+porcenElimCntx <- (cantidadElimCntx/largoCntx) * 100
+print(paste('Deleted ', round(porcenElimCntx, digits = 3), '% of observations.', sep = ''))
+
+```
+###### Data description without outliers
+
+```{r}
+descriptiveContextMc <- mc_fraseCntx %>%
+  group_by(context) %>%
+  summarise(mean = mean(rt, na.rm = TRUE), sd = sd(rt, na.rm = TRUE), median = median(rt, na.rm =TRUE))
+descriptiveContextMc$context <- c('LB', 'UB')
+colnames(descriptiveContextMc) <- c('Context', 'Mean', 'SD', 'Median')
+print(descriptiveContextMc)
+```
+
+Violin plot of rtLog for UB and LB contexts.
+```{r}
+violinContextMc <- ggplot(mc_fraseCntx, aes(factor(context), rtLog, fill = factor(context)))
+violinContextMc + geom_violin(trim = FALSE) + geom_crossbar(stat="summary", fun.y=mean, fun.ymax=mean, fun.ymin=mean, fatten=0.1, width=0.95) + theme_minimal() + xlab('Contexts') + ylab('rtLog') + labs(fill = 'Contexts', subtitle = 'Context segment')
+
+ggplot(mc_fraseCntx, aes(rtLog, fill = context)) + geom_density(alpha = 0.4)
+ggplot(mc_fraseCntx, aes(rtLog, colour = context)) + stat_ecdf(alpha = 0.4)
+
+```
+
+###### Model without ouliers
+
+```{r}
+mc_cntx2 <- lmer(rtLog ~ context + (1+context|subject) + (1+context|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseCntx, REML = FALSE)
+summary(mc_cntx2)
+
+
+mc_fraseCntx$residuals <- residuals(mc_cntx2, type = 'pearson')
+plot(mc_cntx2)
+hist(residuals(mc_cntx2, type = 'pearson'), breaks = 30)
+hist(mc_fraseCntx$rtLog, breaks = 30)
+hist(mc_fraseCntx$rt, breaks = 30)
+
+ggplot(mc_fraseCntx, aes(residuals, fill = context)) + geom_density(alpha = 0.4)
+ggplot(mc_fraseCntx, aes(residuals, colour = context)) + stat_ecdf(alpha = 0.4)
+
+t.test(mc_fraseCntx[mc_fraseCntx$context == 'FP', 12], mc_fraseCntx[mc_fraseCntx$context == 'CN', 12])
+
+summary(glht(mc_cntx2, linfct=mcp(context = "Tukey")))
+
+
+```
+
+
+
+
+##### Question
+```{r}
+boxplot(frasePreg$rtLog)
+hist(frasePreg$rtLog, breaks = 30)
+largoPreg <- length(frasePreg$rt)
+frasePreg <- frasePreg[frasePreg$rt < 13000 & frasePreg$rt > 200,]
+boxplot(frasePreg$rtLog)
+hist(frasePreg$rtLog, breaks = 30)
+
+qqnorm(frasePreg$rtLog)
+frasePreg$subject <- as.factor(frasePreg$subject)
+ggplot(frasePreg, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+
+frasePreg <- frasePreg[frasePreg$rtLog > 2.5,]
+frasePreg <- frasePreg[frasePreg$rtLog < 4,]
+
+
+frasePreg <- frasePreg[order(frasePreg$rtLog),]
+eliminar <- round((length(frasePreg$rtLog)*0.02), 0)
+frasePreg  <- frasePreg[eliminar:(length(frasePreg$rtLog)-eliminar),]
+
+ggplot(frasePreg, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+
+hist(frasePreg$rtLog, breaks = 30)
+
+cantidadElimPreg <- largoPreg - length(frasePreg$rt)
+porcenElimPreg <- (cantidadElimPreg/largoPreg) * 100
+print(paste('Deleted ', round(porcenElimPreg, digits = 3), '% of observations.', sep = ''))
+
+boxplot(frasePreg$rtLog)
+hist(frasePreg$rtLog, breaks = 30)
+```
+##### Data description
+Violin plot of rtLog for UB and LB contexts.
+```{r}
+violinQuest <- ggplot(frasePreg, aes(factor(context), rtLog, fill = factor(context)))
+violinQuest + geom_violin(trim = FALSE) + geom_crossbar(stat="summary", fun.y=mean, fun.ymax=mean, fun.ymin=mean, fatten=1, width=1) + theme_minimal() + xlab('Conditions') + ylab('rtLog') + labs(fill = 'Condition', subtitle = 'Question segment')
+
+ggplot(frasePreg, aes(rtLog, fill = context)) + geom_density(alpha = 0.4)
+
+ggplot(frasePreg, aes(rt, colour = context)) + stat_ecdf(alpha = 0.4)
+
+```
+
+Mean and SD
+```{r}
+descriptiveQuest <- frasePreg %>%
+  group_by(context) %>%
+  summarise(mean = mean(rt, na.rm = TRUE), sd = sd(rt, na.rm = TRUE))
+descriptiveQuest$context <- c('LB', 'UB')
+colnames(descriptiveQuest) <- c('Context', 'Mean', 'SD')
+print(descriptiveQuest)
+```
+
+##### LMM
+LMM for comparing questions. Context as fixed effect. Subject, item, form and order as random intercepts. 
+
+
+```{r}
+m1_quest <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data=frasePreg, REML = FALSE)
+summary(m1_quest)
+summary(glht(m1_quest, linfct=mcp(context = "Tukey")))
+```
+
+##### Model criticism approach
+
+```{r}
+mc_fraseQuest <- datos[ind_condition & datos$phrase == 'PREG' & datos$rt > 200 & datos$rt < 13000,]
+
+largo_fraseQuest <- length(mc_fraseQuest$rt)
+
+
+mc_quest <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseQuest, REML = FALSE)
+summary(mc_quest)
+
+mc_fraseQuest$residuals <-residuals(mc_quest, type = 'pearson')
+qqnorm(mc_fraseQuest$residuals)
+min(mc_fraseQuest$residuals)
+max(mc_fraseQuest$residuals)
+plot(mc_quest)
+
+
+mc_fraseQuest <- mc_fraseQuest[mc_fraseQuest$residuals < (mean(mc_fraseQuest$residuals)+(sd(mc_fraseQuest$residuals)*2.5)) & mc_fraseQuest$residuals > (mean(mc_fraseQuest$residuals)-(sd(mc_fraseQuest$residuals)*2.5)),]
+
+qqnorm(mc_fraseQuest$residuals)
+min(mc_fraseQuest$residuals)
+max(mc_fraseQuest$residuals)
+
+
+cantidadElimQuest <- largo_fraseQuest - length(mc_fraseQuest$rt)
+porcenElimQuest <- (cantidadElimQuest/largo_fraseQuest) * 100
+print(paste('Deleted ', round(porcenElimQuest, digits = 3), '% of observations.', sep = ''))
+
+
+```
+
+###### Data description without outliers
+
+```{r}
+descriptiveQuestMc <- mc_fraseQuest %>%
+  group_by(context) %>%
+  summarise(mean = mean(rt, na.rm = TRUE), sd = sd(rt, na.rm = TRUE))
+descriptiveQuestMc$context <- c('LB', 'UB')
+colnames(descriptiveQuestMc) <- c('Context', 'Mean', 'SD')
+print(descriptiveQuestMc)
+
+```
+
+```{r}
+violinQuestMC <- ggplot(mc_fraseQuest, aes(factor(context), rtLog, fill = factor(context)))
+violinQuestMC + geom_violin(trim = FALSE) + geom_crossbar(stat="summary", fun.y=mean, fun.ymax=mean, fun.ymin=mean, fatten=0.1, width=0.9) + theme_minimal() + xlab('Conditions') + ylab('rtLog') + labs(fill = 'Condition', subtitle = 'Question segment')
+
+ggplot(mc_fraseQuest, aes(rtLog, fill = context)) + geom_density(alpha = 0.4)
+ggplot(mc_fraseQuest, aes(rtLog, colour = context)) + stat_ecdf(alpha = 0.4)
+
+```
+
+
+###### Model without ouliers
+```{r}
+mc_quest2 <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseQuest, REML = FALSE)
+summary(mc_quest2)
+
+hist(mc_fraseQuest$rtLog, breaks = 30)
+hist(mc_fraseQuest$residuals, breaks = 30)
+
+mc_fraseQuest$residuals <- residuals(mc_quest2, type = 'pearson')
+plot(mc_quest2)
+hist(residuals(mc_quest2, type = 'pearson'), breaks = 30)
+hist(mc_fraseQuest$rtLog, breaks = 30)
+hist(mc_fraseQuest$rt, breaks = 30)
+
+ggplot(mc_fraseQuest, aes(residuals, fill = context)) + geom_density(alpha = 0.4)
+ggplot(mc_fraseQuest, aes(residuals, colour = context)) + stat_ecdf(alpha = 0.4)
+
+t.test(mc_fraseQuest[mc_fraseQuest$context == 'FP', 12], mc_fraseQuest[mc_fraseQuest$context == 'CN', 12])
+
+summary(glht(mc_quest2, linfct=mcp(context = "Tukey")))
+
+```
+
+
+
+##### Quantifier segment
+
+```{r}
+boxplot(fraseCuant$rtLog)
+hist(fraseCuant$rtLog, breaks = 30)
+
+largocuant <- length(fraseCuant$rt)
+fraseCuant <- fraseCuant[fraseCuant$rt > 200,]
+fraseCuant <- fraseCuant[fraseCuant$rt < 13000,]
+
+hist(fraseCuant$rtLog, breaks = 50)
+
+qqnorm(fraseCuant$rtLog)
+fraseCuant$subject <- as.factor(fraseCuant$subject)
+ggplot(fraseCuant, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+  
+fraseCuant <- fraseCuant[fraseCuant$rtLog > 2.5,]
+fraseCuant <- fraseCuant[fraseCuant$rtLog < 4,]
+
+hist(fraseCuant$rtLog, breaks = 30)
+qqnorm(fraseCuant$rtLog)
+ggplot(fraseCuant, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+
+fraseCuant <- fraseCuant[order(fraseCuant$rtLog),]
+eliminar <- round((length(fraseCuant$rtLog)*0.02), 0)
+fraseCuant  <- fraseCuant[eliminar:(length(fraseCuant$rtLog)-eliminar),]
+
+plot(quantile(fraseCuant$rtLog, na.rm = TRUE), xaxt = "n", xlab = "Quartiles", ylab = "log RT")
+qqnorm(fraseCuant$rtLog)
+
+cantidadElim <- largocuant - length(na.omit(fraseCuant$rt))
+porcenElim <- (cantidadElim/largocuant) * 100
+print(paste('Deleted ', round(porcenElim, digits = 3), '% of observations.', sep = ''))
+
+
+
+
+
+```
+
+##### Data description
+
+Violin plot of rtLog for quantifier segment with 'Some' comparing UB and LB contexts.
+Density and ECDF plot of raw rt. 
+
+```{r}
+violinQuant <- ggplot(na.omit(fraseCuant[fraseCuant$quantifier == 'A',]), aes(factor(context), rtLog, fill = factor(context)))
+violinQuant + geom_violin(trim = FALSE) + geom_crossbar(stat="summary", fun.y=mean, fun.ymax=mean, fun.ymin=mean, fatten=0.2, width=1) + theme_minimal() + xlab('Conditions') + ylab('rtLog') + labs(fill = 'Condition', subtitle = 'Quantifier segment')
+
+
+ggplot(na.omit(fraseCuant[fraseCuant$quantifier == 'A',]), aes(rtLog, fill = context)) + geom_density(alpha = 0.4)
+
+ggplot(na.omit(fraseCuant[fraseCuant$quantifier == 'A',]), aes(rtLog, colour = context)) + stat_ecdf(alpha = 0.4)
+
+
+```
+
+
+
+Description of raw rt. 
+
+
+```{r}
+require(retimes)
+
+descriptiveQuant <- fraseCuant[fraseCuant$quantifier == 'A',] %>%
+  group_by(context) %>%
+  summarise(mean = mean(rt, na.rm = TRUE), sd = sd(rt, na.rm = TRUE), median = median(rt, na.rm = TRUE)) 
+descriptiveQuant$context <- c('LB + Some', 'UB + Some')
+colnames(descriptiveQuant) <- c('Condition', 'Mean', 'SD', 'Median')
+print(descriptiveQuant)
+
+```
+
+
+##### LMM
+LMM for comparing segments with 'Some'. Context as fixed effect. Subject, item, form and order as random intercepts. 
+```{r}
+m1_cuant <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data=fraseCuant[fraseCuant$quantifier == 'A',], REML = FALSE)
+
+fraseCuant$residuals <- NA
+fraseCuant[fraseCuant$quantifier == 'A', 12] <- residuals(m1_cuant, 'pearson')
+
+plot(m1_cuant)
+qqnorm(na.omit(fraseCuant$residuals))
+max(na.omit(fraseCuant$residuals))
+min(na.omit(fraseCuant$residuals))
+
+summary(m1_cuant)
+summary(glht(m1_cuant, linfct=mcp(context = "Tukey")))
+
+```
+
+p-value of .007 shows that the mean is significantly different. The small difference in reading times raw values could be explained by the ex-gaussian distribution and the differences in the exponential part.
+
+
+##### Model criticism approach
+
+```{r}
+mc_fraseCuant <- datos[ind_condition & datos$phrase == 'blanco_CUANT' & datos$rt > 200 & datos$rt < 13000 & datos$quantifier == 'A',]
+
+largo_mc_cuant <- length(na.omit(mc_fraseCuant$rt))
+
+mc_cuant <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseCuant, REML = FALSE)
+summary(mc_cuant)
+
+
+mc_fraseCuant$residuals <-residuals(mc_cuant, type = 'pearson')
+qqnorm(mc_fraseCuant$residuals)
+min(mc_fraseCuant$residuals)
+max(mc_fraseCuant$residuals)
+plot(mc_cuant)
+
+
+mc_fraseCuant <- mc_fraseCuant[mc_fraseCuant$residuals < (mean(mc_fraseCuant$residuals)+(sd(mc_fraseCuant$residuals)*2.5)) & mc_fraseCuant$residuals > (mean(mc_fraseCuant$residuals)-(sd(mc_fraseCuant$residuals)*2.5)),]
+
+qqnorm(mc_fraseCuant$residuals)
+min(mc_fraseCuant$residuals)
+max(mc_fraseCuant$residuals)
+
+cantidadElim <- largo_mc_cuant - length(na.omit(mc_fraseCuant$rt))
+porcenElim <- (cantidadElim/largo_mc_cuant) * 100
+print(paste('Deleted ', round(porcenElim, digits = 3), '% of observations.', sep = ''))
+
+hist(mc_fraseCuant$rtLog, breaks = 30)
+hist(mc_fraseCuant$residuals, breaks = 30)
+
+
+```
+
+##### Data description without outliers
+
+
+```{r}
+require(retimes)
+
+descriptiveQuantMC <- mc_fraseCuant %>%
+  group_by(context) %>%
+  summarise(mean = mean(rt, na.rm = TRUE), sd = sd(rt, na.rm = TRUE), median = median(rt, na.rm = TRUE)) 
+descriptiveQuantMC$context <- c('LB + Some', 'UB + Some')
+colnames(descriptiveQuantMC) <- c('Condition', 'Mean', 'SD', 'Median')
+print(descriptiveQuantMC)
+
+```
+
+```{r}
+violinQuantMC <- ggplot(mc_fraseCuant, aes(factor(context), rtLog, fill = factor(context)))
+violinQuantMC + geom_violin(trim = FALSE) + geom_crossbar(stat="summary", fun.y=mean, fun.ymax=mean, fun.ymin=mean, fatten=0.2, width=1) + theme_minimal() + xlab('Conditions') + ylab('rtLog') + labs(fill = 'Condition', subtitle = 'Quantifier segment')
+
+
+ggplot(mc_fraseCuant, aes(rtLog, fill = context)) + geom_density(alpha = 0.4)
+ggplot(mc_fraseCuant, aes(rtLog, colour = context)) + stat_ecdf(alpha = 0.4)
+
+
+```
+
+
+
+##### LMM without outliers
+```{r}
+mc_cuant2 <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseCuant, REML = FALSE)
+summary(mc_cuant2)
+
+mc_fraseCuant$residuals <- residuals(mc_cuant2, type = 'pearson')
+plot(mc_cuant2)
+hist(residuals(mc_cuant2, type = 'pearson'), breaks = 30)
+hist(mc_fraseCuant$rtLog, breaks = 30)
+hist(mc_fraseCuant$rt, breaks = 30)
+
+ggplot(mc_fraseCuant, aes(residuals, fill = context)) + geom_density(alpha = 0.4)
+ggplot(mc_fraseCuant, aes(residuals, colour = context)) + stat_ecdf(alpha = 0.4)
+
+t.test(mc_fraseCuant[mc_fraseCuant$context == 'FP', 12], mc_fraseCuant[mc_fraseCuant$context == 'CN', 12])
+
+summary(glht(mc_cuant2, linfct=mcp(context = "Tukey")))
+
+```
+```{r}
+mc_cuant2 <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseCuant, REML = FALSE)
+summary(mc_cuant2)
+results <- analyze(mc_cuant2, CI = 95)
+print(results)
+
+```
+
+
+#### The rest segment
+
+```{r}
+boxplot(fraseRest$rtLog)
+hist(fraseRest$rtLog, breaks = 30)
+max(fraseRest$rtLog)
+min(fraseRest$rtLog)
+largorest <- length(fraseRest$rt)
+
+fraseRest <- fraseRest[fraseRest$rt > 200 & fraseRest$rt < 13000,]
+
+qqnorm(fraseRest$rtLog)
+
+fraseRest$subject <- as.factor(fraseRest$subject)
+ggplot(fraseRest, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+
+fraseRest <- fraseRest[fraseRest$rtLog > 2.4,]
+fraseRest <- fraseRest[fraseRest$rtLog < 3.87,]
+
+ggplot(fraseRest, aes(subject, rtLog)) + 
+  geom_point(position = 'jitter', aes(color = subject)) + 
+  theme(legend.position = 'none', axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+
+qqnorm(fraseRest$rtLog)
+hist(fraseRest$rtLog, breaks = 30)
+
+fraseRest <- fraseRest[order(fraseRest$rtLog),]
+eliminar <- round((length(fraseRest$rtLog)*0.02), 0)
+fraseRest  <- fraseRest[eliminar:(length(fraseRest$rtLog)-eliminar),]
+
+qqnorm(fraseRest$rtLog)
+hist(fraseRest$rtLog, breaks = 30)
+
+cantidadElimRest <- largorest - length(fraseRest$rt)
+porcenElimRest <- (cantidadElimRest/largorest) * 100
+print(paste('Deleted ', round(porcenElimRest, digits = 3), '% of observations.', sep = ''))
+
+```
+
+
+Violin plot of rtLog for 'the rest' segment with comparing UB+S, LB+S and UB + OS contexts.
+
+```{r}
+violinRest <- ggplot(fraseRest, aes(factor(condition), rtLog, fill = factor(condition, labels = c("LB+S","UB+S","UB+OS"))))
+
+violinRest + geom_violin(trim = FALSE) +  labs(fill = 'Condition', subtitle = '"the rest" segment') + geom_crossbar(stat="summary", fun.y=mean, fun.ymax=mean, fun.ymin=mean, fatten=1, width=1) + xlab('Conditions') + ylab('rtLog') + theme_minimal() + scale_x_discrete(labels = c("LB+S","UB+S","UB+OS"))
+
+
+ggplot(fraseRest, aes(rt, fill = condition)) + geom_density(alpha = 0.4)
+
+ggplot(fraseRest, aes(rt, colour = condition)) + stat_ecdf(alpha = 0.4)
+```
+
+Mean and SD
+
+```{r}
+descriptiveRest <- fraseRest %>%
+  group_by(condition) %>%
+  summarise(mean = mean(rt, na.rm = TRUE), sd = sd(rt, na.rm = TRUE), mu = (mexgauss(na.omit(rt))[1]), sigma = (mexgauss(na.omit(rt))[2]) , tau = (mexgauss(na.omit(rt))[3]))
+descriptiveRest$condition <- c('LB + Some', 'UB + Some', 'UB + Only some')
+colnames(descriptiveRest) <- c('Condition', 'Mean', 'SD', 'mu', 'sigma', 'tau')
+print(descriptiveRest)
+```
+
+
+##### LMM
+LMM for comparing 'the rest' segments. Context + quantifier as fixed effects. Subject, item, form, and order as random intercepts. 
+
+```{r}
+
+
+
+m1_rest <- lmer(rtLog ~ context + quantifier + (1|subject) + (1|idnumber), data=fraseRest, REML = FALSE)
+summary(m1_rest)
+results <- analyze(m1_rest, CI = 95)
+print(results)
+
+
+```
+
+##### Model criticism approach
+```{r}
+
+mc_fraseRest <- datos[ind_condition & datos$phrase == 'blanco_REST' & datos$rt > 200 & datos$rt < 13000,]
+
+largorestMC <- length(mc_fraseRest$rt)
+
+mc_rest <- lmer(rtLog ~ context + quantifier + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseRest, REML = FALSE)
+summary(mc_rest)
+
+
+mc_fraseRest$residuals <-residuals(mc_rest, type = 'pearson')
+qqnorm(mc_fraseRest$residuals)
+min(mc_fraseRest$residuals)
+max(mc_fraseRest$residuals)
+plot(mc_rest)
+
+mc_fraseRest <- mc_fraseRest[mc_fraseRest$residuals < (mean(mc_fraseRest$residuals)+(sd(mc_fraseRest$residuals)*2.5)) & mc_fraseRest$residuals > (mean(mc_fraseRest$residuals)-(sd(mc_fraseRest$residuals)*2.5)),]
+
+qqnorm(mc_fraseRest$residuals)
+min(mc_fraseRest$residuals)
+max(mc_fraseRest$residuals)
+
+cantidadElimRestMC <- largorestMC - length(mc_fraseRest$rt)
+porcenElimRestMC <- (cantidadElimRest/largorest) * 100
+print(paste('Deleted ', round(porcenElimRestMC, digits = 3), '% of observations.', sep = ''))
+
+```
+```{r}
+
+mc_rest.null <- lmer(rtLog ~ 1 + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseRest, REML = FALSE)
+summary(mc_rest.null)
+
+mc_rest1 <- lmer(rtLog ~ context + quantifier + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseRest, REML = FALSE)
+summary(mc_rest1)
+#Should be significant
+anova(mc_rest.null,mc_rest1)
+
+mc_rest2 <- lmer(rtLog ~ context + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseRest, REML = FALSE)
+summary(mc_rest2)
+#Should not
+anova(mc_rest1, mc_rest2)
+
+
+mc_rest3 <- lmer(rtLog ~ quantifier + (1|subject) + (1|idnumber) + (1|latinsqrn) + (1|order), data= mc_fraseRest, REML = FALSE)
+summary(mc_rest3)
+
+#Should be different
+anova(mc_rest1, mc_rest3)
+
+hist(mc_fraseRest$rtLog, breaks = 30)
+hist(mc_fraseRest$residuals, breaks = 30)
+plot(mc_rest2)
+
+```
+
+
+
+
+### References
+
+Norman, G. (2010) Likert scales, levels of measurement and the “laws” of statistics. Advances in Health Sciences Education, 15(5), 625–632.  https://www.ncbi.nlm.nih.gov/pubmed/20146096
+
+Baayen H (2008) Analyzing linguistic data: a practical introduction to statistics using R. Cambridge: Cambridge University Press. 390 p.
+
+
+
